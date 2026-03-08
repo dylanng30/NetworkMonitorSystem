@@ -1,8 +1,13 @@
-﻿using System.Net;
+﻿using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
-using SharedLibrary.Interfaces;
+using System.Threading;
+using SharedLibrary;
 using SharedLibrary.Models;
 
 namespace MonitorServer.Controllers
@@ -10,35 +15,28 @@ namespace MonitorServer.Controllers
     public class ServerController
     {
         private readonly TcpListener _listener;
-        private readonly IMetricCollector _metricCollector;
-
-        // Chia 2 list riêng biệt để dễ quản lý theo Role
         private readonly List<TcpClient> _adminClients = new List<TcpClient>();
-        private readonly List<TcpClient> _standardClients = new List<TcpClient>();
-        private readonly object _lockObj = new object(); // Dùng để lock khi thao tác với List trong môi trường Multi-thread
 
-        public ServerController(string ip, int port, IMetricCollector metricCollector)
+        // Dictionary lưu trữ Metrics thật từ các client
+        private readonly ConcurrentDictionary<string, ClientNetworkInfo> _clientMetrics = new ConcurrentDictionary<string, ClientNetworkInfo>();
+        private readonly object _lockObj = new object();
+
+        public ServerController()
         {
-            _listener = new TcpListener(IPAddress.Parse(ip), port);
-            _metricCollector = metricCollector;
+            _listener = new TcpListener(IPAddress.Parse(Constants.SERVER_IP), Constants.SERVER_PORT);
         }
 
         public void Start()
         {
             _listener.Start();
-            Console.WriteLine("Server đã khởi động. Đang lắng nghe kết nối...");
+            Console.WriteLine($"Server đã khởi động tại {Constants.SERVER_IP}:{Constants.SERVER_PORT}.");
 
-            // Thread riêng biệt để liên tục gửi Metrics cho Admin
-            Thread broadcastThread = new Thread(BroadcastMetricsLoop) { IsBackground = true };
+            Thread broadcastThread = new Thread(BroadcastMetricsToAdmins) { IsBackground = true };
             broadcastThread.Start();
 
-            // Vòng lặp chính nhận kết nối
             while (true)
             {
                 TcpClient client = _listener.AcceptTcpClient();
-                Console.WriteLine($"[+] Client kết nối: {client.Client.RemoteEndPoint}");
-
-                // Cấp cho mỗi client 1 Thread riêng để xử lý non-blocking
                 Thread clientThread = new Thread(() => HandleClient(client)) { IsBackground = true };
                 clientThread.Start();
             }
@@ -47,15 +45,16 @@ namespace MonitorServer.Controllers
         private void HandleClient(TcpClient client)
         {
             NetworkStream stream = client.GetStream();
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
             string role = "Unknown";
+            string clientId = string.Empty;
 
             try
             {
                 while (client.Connected)
                 {
                     int bytesRead = stream.Read(buffer, 0, buffer.Length);
-                    if (bytesRead == 0) break; // Client ngắt kết nối
+                    if (bytesRead == 0) break;
 
                     string jsonText = Encoding.UTF8.GetString(buffer, 0, bytesRead);
                     NetworkPacket? packet = JsonSerializer.Deserialize<NetworkPacket>(jsonText);
@@ -65,78 +64,64 @@ namespace MonitorServer.Controllers
                         if (packet.Type == PacketType.Auth)
                         {
                             role = packet.Role;
-                            AddClientToList(client, role);
+                            clientId = packet.ClientId;
+                            if (role == "Admin")
+                            {
+                                lock (_lockObj) _adminClients.Add(client);
+                                Console.WriteLine($"[+] Admin kết nối: {clientId}");
+                            }
                         }
-                        else if (packet.Type == PacketType.DummyTraffic)
+                        else if (packet.Type == PacketType.ClientMetricsReport && role == "Standard")
                         {
-                            // Chỉ nhận để tính băng thông, không cần xử lý logic
+                            // Nhận dữ liệu thật từ Client và cập nhật vào Dictionary
+                            var metrics = JsonSerializer.Deserialize<ClientNetworkInfo>(packet.Payload);
+                            if (metrics != null)
+                            {
+                                _clientMetrics[metrics.ClientId] = metrics;
+                            }
                         }
                     }
                 }
             }
-            catch (Exception) { /* Bỏ qua lỗi kết nối đứt ngang */ }
+            catch { }
             finally
             {
-                RemoveClientFromList(client, role);
+                if (role == "Admin") lock (_lockObj) _adminClients.Remove(client);
+                if (role == "Standard" && !string.IsNullOrEmpty(clientId))
+                {
+                    _clientMetrics.TryRemove(clientId, out _);
+                }
                 client.Close();
-                Console.WriteLine($"[-] Client ngắt kết nối.");
+                Console.WriteLine($"[-] Client ngắt kết nối: {clientId}");
             }
         }
 
-        private void AddClientToList(TcpClient client, string role)
-        {
-            lock (_lockObj)
-            {
-                if (role == "Admin") _adminClients.Add(client);
-                else if (role == "Standard") _standardClients.Add(client);
-            }
-            Console.WriteLine($"Đã xác thực một {role} Client.");
-        }
-
-        private void RemoveClientFromList(TcpClient client, string role)
-        {
-            lock (_lockObj)
-            {
-                if (role == "Admin") _adminClients.Remove(client);
-                else if (role == "Standard") _standardClients.Remove(client);
-            }
-        }
-
-        private void BroadcastMetricsLoop()
+        private void BroadcastMetricsToAdmins()
         {
             while (true)
             {
-                Thread.Sleep(1000);
+                Thread.Sleep(1000); // Broadcast mỗi giây
 
-                NetworkMetrics metrics;
                 List<TcpClient> adminsToNotify;
-
-                lock (_lockObj)
-                {
-                    metrics = _metricCollector.GetCurrentMetrics(_standardClients.Count, _adminClients.Count);
-                    adminsToNotify = _adminClients.ToList();
-                }
+                lock (_lockObj) adminsToNotify = _adminClients.ToList();
 
                 if (adminsToNotify.Count > 0)
                 {
+                    // Lấy toàn bộ Value trong Dictionary chuyển thành List
+                    var allMetrics = _clientMetrics.Values.ToList();
+
                     NetworkPacket packet = new NetworkPacket
                     {
-                        Type = PacketType.MetricsUpdate,
-                        Payload = JsonSerializer.Serialize(metrics)
+                        Type = PacketType.AdminDashboardUpdate,
+                        Payload = JsonSerializer.Serialize(allMetrics)
                     };
 
                     byte[] data = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(packet));
 
                     foreach (var admin in adminsToNotify)
                     {
-                        try
-                        {
-                            admin.GetStream().Write(data, 0, data.Length);
-                        }
-                        catch 
-                        { 
-                            /* Xử lý nếu gửi thất bại */ 
-                        }
+                        try { admin.GetStream().Write(data, 0, data.Length); }
+                        catch { }
                     }
                 }
             }

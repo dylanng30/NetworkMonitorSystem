@@ -1,6 +1,8 @@
-﻿using System.Windows;
+﻿using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Windows;
 using AdminDashboard.Controllers;
-using AdminDashboard.Models;
 using SharedLibrary.Models;
 
 namespace AdminDashboard
@@ -8,42 +10,40 @@ namespace AdminDashboard
     public partial class MainWindow : Window
     {
         private AdminClientController _controller;
-        private DashboardViewModel _viewModel;
+
+        // Dùng ObservableCollection để Binding UI tự động cập nhật
+        private ObservableCollection<ClientNetworkInfo> _clientsData;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            // Khởi tạo ViewModel và gán DataContext cho UI Binding
-            _viewModel = new DashboardViewModel();
-            this.DataContext = _viewModel;
+            _clientsData = new ObservableCollection<ClientNetworkInfo>();
+            DgClients.ItemsSource = _clientsData;
 
-            // Khởi tạo Controller
             _controller = new AdminClientController();
-
-            // Đăng ký sự kiện: Khi Controller nhận data, update ViewModel
             _controller.OnMetricsReceived += UpdateDashboard;
 
-            // Kết nối đến Server ở IP local, port 8888 (Phải chạy MonitorServer trước)
-            _controller.Connect("127.0.0.1", 8888);
+            // Kết nối Server sử dụng thông tin trong file Constants thay vì hardcode
+            _controller.Connect();
         }
 
-        private void UpdateDashboard(NetworkMetrics metrics)
+        private void UpdateDashboard(List<ClientNetworkInfo> clients)
         {
-            // Vì sự kiện được gọi từ Thread mạng ngầm (Background Thread), 
-            // ta phải dùng Dispatcher để đưa thao tác cập nhật UI về UI Thread chính
             Application.Current.Dispatcher.Invoke(() =>
             {
-                _viewModel.DownloadSpeed = metrics.DownloadSpeedKbps;
-                _viewModel.UploadSpeed = metrics.UploadSpeedKbps;
-                _viewModel.StandardClients = metrics.ActiveStandardClients;
-                _viewModel.AdminClients = metrics.ActiveAdminClients;
+                TxtTotalClients.Text = $"Tổng số Standard Clients đang hoạt động: {clients.Count}";
+
+                _clientsData.Clear();
+                foreach (var client in clients)
+                {
+                    _clientsData.Add(client);
+                }
             });
         }
 
         private void Window_Closed(object sender, EventArgs e)
         {
-            // Ngắt kết nối socket an toàn khi tắt app
             _controller.Disconnect();
         }
     }

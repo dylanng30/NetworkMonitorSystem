@@ -1,6 +1,5 @@
-﻿using MonitorServer.Controllers;
-using MonitorServer.Services;
-using SharedLibrary.Interfaces;
+﻿using System;
+using MonitorServer.Controllers;
 
 namespace MonitorServer
 {
@@ -9,9 +8,7 @@ namespace MonitorServer
         static void Main(string[] args)
         {
             Console.Title = "Monitor Server";
-            IMetricCollector metricCollector = new PerformanceCounterService();
-            ServerController server = new ServerController("0.0.0.0", 8888, metricCollector);
-
+            ServerController server = new ServerController();
             server.Start();
         }
     }

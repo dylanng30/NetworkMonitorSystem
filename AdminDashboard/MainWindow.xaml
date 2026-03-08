@@ -1,42 +1,48 @@
 ﻿<Window x:Class="AdminDashboard.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Admin Dashboard - Network Monitor" Height="400" Width="600"
+        Title="Admin Dashboard - Advanced Network Monitor" Height="450" Width="800"
         Background="#1e1e1e" Foreground="White"
         Closed="Window_Closed">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="LIVE NETWORK DASHBOARD" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,20" Foreground="#00d8ff"/>
+        <TextBlock Grid.Row="0" Text="LIVE CLIENT MONITORING" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10" Foreground="#00d8ff"/>
 
-        <StackPanel Grid.Row="1" Margin="10">
-            <TextBlock Text="Tốc độ Download (KB/s):" FontSize="16" Foreground="LightGray"/>
-            <TextBlock Text="{Binding DownloadSpeed, StringFormat={}{0:F2} KB/s}" FontSize="28" FontWeight="Bold" Foreground="#4caf50"/>
-            <ProgressBar Value="{Binding DownloadSpeed}" Maximum="5000" Height="15" Margin="0,5,0,0" Foreground="#4caf50" Background="#333"/>
-        </StackPanel>
+        <TextBlock Grid.Row="1" x:Name="TxtTotalClients" Text="Tổng số Standard Clients: 0" FontSize="16" FontWeight="Bold" Foreground="#4caf50" Margin="0,0,0,15"/>
 
-        <StackPanel Grid.Row="2" Margin="10">
-            <TextBlock Text="Tốc độ Upload (KB/s):" FontSize="16" Foreground="LightGray"/>
-            <TextBlock Text="{Binding UploadSpeed, StringFormat={}{0:F2} KB/s}" FontSize="28" FontWeight="Bold" Foreground="#ff9800"/>
-            <ProgressBar Value="{Binding UploadSpeed}" Maximum="5000" Height="15" Margin="0,5,0,0" Foreground="#ff9800" Background="#333"/>
-        </StackPanel>
+        <DataGrid Grid.Row="2" x:Name="DgClients" AutoGenerateColumns="False" CanUserAddRows="False" Background="#2d2d30" Foreground="Black" RowBackground="White" AlternatingRowBackground="#f1f2f6" HeadersVisibility="Column">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Client ID" Binding="{Binding ClientId}" Width="100"/>
+                <DataGridTextColumn Header="IP Address" Binding="{Binding IpAddress}" Width="120"/>
+                <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="80"/>
 
-        <Border Grid.Row="3" Background="#2d2d30" CornerRadius="8" Padding="15" Margin="10">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                <StackPanel Margin="0,0,40,0">
-                    <TextBlock Text="Client Thông thường:" FontSize="14" Foreground="LightGray"/>
-                    <TextBlock Text="{Binding StandardClients}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#03a9f4"/>
-                </StackPanel>
-                <StackPanel>
-                    <TextBlock Text="Admin Đang theo dõi:" FontSize="14" Foreground="LightGray"/>
-                    <TextBlock Text="{Binding AdminClients}" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#e91e63"/>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+                <DataGridTemplateColumn Header="Download Speed" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="5">
+                                <TextBlock Text="{Binding DownloadSpeedKbps, StringFormat={}{0:F2} KB/s}" Width="80" Foreground="#27ae60" FontWeight="Bold"/>
+                                <ProgressBar Value="{Binding DownloadSpeedKbps}" Maximum="10000" Width="100" Height="15" Foreground="#2ecc71"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTemplateColumn Header="Upload Speed" Width="200">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="5">
+                                <TextBlock Text="{Binding UploadSpeedKbps, StringFormat={}{0:F2} KB/s}" Width="80" Foreground="#e67e22" FontWeight="Bold"/>
+                                <ProgressBar Value="{Binding UploadSpeedKbps}" Maximum="10000" Width="100" Height="15" Foreground="#e67e22"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
     </Grid>
 </Window>

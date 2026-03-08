@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System;
+using System.Windows;
 using StandardClient.Controllers;
 
 namespace StandardClient
@@ -11,58 +12,29 @@ namespace StandardClient
         {
             InitializeComponent();
             _controller = new StandardClientController();
-
-            // Lắng nghe sự kiện thay đổi trạng thái từ Controller để update text
             _controller.OnStatusChanged += UpdateStatus;
+            _controller.OnSpeedUpdated += UpdateSpeed;
         }
 
-        private void UpdateStatus(string message)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                TxtStatus.Text = $"Trạng thái: {message}";
-            });
-        }
+        private void UpdateStatus(string message) => Dispatcher.Invoke(() => TxtStatus.Text = $"Trạng thái: {message}");
+
+        private void UpdateSpeed(double download, double upload) => Dispatcher.Invoke(() =>
+            TxtSpeed.Text = $"Download: {download:F2} KB/s | Upload: {upload:F2} KB/s");
 
         private void BtnConnect_Click(object sender, RoutedEventArgs e)
         {
-            _controller.Connect("127.0.0.1", 8888);
-
+            _controller.Connect();
             BtnConnect.IsEnabled = false;
             BtnDisconnect.IsEnabled = true;
-            BtnStartTraffic.IsEnabled = true;
         }
 
         private void BtnDisconnect_Click(object sender, RoutedEventArgs e)
         {
             _controller.Disconnect();
-
             BtnConnect.IsEnabled = true;
             BtnDisconnect.IsEnabled = false;
-            BtnStartTraffic.IsEnabled = false;
-            BtnStopTraffic.IsEnabled = false;
         }
 
-        private void BtnStartTraffic_Click(object sender, RoutedEventArgs e)
-        {
-            // Truyền tham số tốc độ (càng cao gửi càng nhanh, ví dụ truyền 10)
-            _controller.StartTrafficGenerator(10);
-
-            BtnStartTraffic.IsEnabled = false;
-            BtnStopTraffic.IsEnabled = true;
-        }
-
-        private void BtnStopTraffic_Click(object sender, RoutedEventArgs e)
-        {
-            _controller.StopTrafficGenerator();
-
-            BtnStartTraffic.IsEnabled = true;
-            BtnStopTraffic.IsEnabled = false;
-        }
-
-        private void Window_Closed(object sender, EventArgs e)
-        {
-            _controller.Disconnect();
-        }
+        private void Window_Closed(object sender, EventArgs e) => _controller.Disconnect();
     }
 }
