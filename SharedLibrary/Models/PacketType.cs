@@ -5,6 +5,11 @@
         Auth,
         ClientMetricsReport,
         AdminDashboardUpdate,
-        Disconnect
+        Disconnect,
+
+        RequestAlerts,
+        ResponseAlerts,
+        RequestConnectionLogs,
+        ResponseConnectionLogs
     }
 }

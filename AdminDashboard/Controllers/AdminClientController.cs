@@ -17,8 +17,16 @@ namespace AdminDashboard.Controllers
         private Thread? _listenThread;
         private bool _isConnected;
 
-        // Trả về một List chứa thông tin của tất cả StandardClients
+        private readonly string _clientId;
+
         public event Action<List<ClientNetworkInfo>>? OnMetricsReceived;
+        public event Action<List<AlertInfo>>? OnAlertsReceived;
+        public event Action<List<ConnectionLogInfo>>? OnConnectionLogsReceived;
+
+        public AdminClientController()
+        {
+            _clientId = "Admin_" + Guid.NewGuid().ToString().Substring(0, 5);
+        }
 
         public void Connect()
         {
@@ -32,7 +40,7 @@ namespace AdminDashboard.Controllers
                 {
                     Type = PacketType.Auth,
                     Role = "Admin",
-                    ClientId = "Admin_" + Guid.NewGuid().ToString().Substring(0, 5)
+                    ClientId = _clientId
                 };
                 SendPacket(authPacket);
 
@@ -57,7 +65,7 @@ namespace AdminDashboard.Controllers
 
         private void ListenForData()
         {
-            byte[] buffer = new byte[16384]; // Tăng buffer size để chứa list json lớn
+            byte[] buffer = new byte[16384];
             try
             {
                 while (_isConnected && _stream != null)
@@ -66,19 +74,46 @@ namespace AdminDashboard.Controllers
                     if (bytesRead == 0) break;
 
                     string jsonText = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+                    
                     NetworkPacket? packet = JsonSerializer.Deserialize<NetworkPacket>(jsonText);
 
-                    if (packet != null && packet.Type == PacketType.AdminDashboardUpdate)
+                    if (packet != null)
                     {
-                        var clientsMetrics = JsonSerializer.Deserialize<List<ClientNetworkInfo>>(packet.Payload);
-                        if (clientsMetrics != null)
+                        if (packet.Type == PacketType.AdminDashboardUpdate)
                         {
-                            OnMetricsReceived?.Invoke(clientsMetrics);
+                            var clientsMetrics = JsonSerializer.Deserialize<List<ClientNetworkInfo>>(packet.Payload);
+                            if (clientsMetrics != null)
+                            {
+                                OnMetricsReceived?.Invoke(clientsMetrics);
+                            }
+                        }
+                        else if (packet.Type == PacketType.ResponseAlerts)
+                        {
+                            var alerts = JsonSerializer.Deserialize<List<AlertInfo>>(packet.Payload);
+                            if (alerts != null) OnAlertsReceived?.Invoke(alerts);
+                        }
+                        else if (packet.Type == PacketType.ResponseConnectionLogs)
+                        {
+                            var logs = JsonSerializer.Deserialize<List<ConnectionLogInfo>>(packet.Payload);
+                            if (logs != null) OnConnectionLogsReceived?.Invoke(logs);
                         }
                     }
                 }
             }
             catch { _isConnected = false; }
+        }
+
+        public void RequestAlertsData()
+        {
+            var packet = new NetworkPacket { Type = PacketType.RequestAlerts, Role = "Admin", ClientId = _clientId };
+            SendPacket(packet);
+        }
+
+        public void RequestConnectionLogsData()
+        {
+            var packet = new NetworkPacket { Type = PacketType.RequestConnectionLogs, Role = "Admin", ClientId = _clientId };
+            SendPacket(packet);
         }
 
         public void Disconnect()
